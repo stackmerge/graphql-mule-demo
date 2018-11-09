@@ -1,0 +1,21 @@
+schema {
+	query: Query
+}
+
+type Query{
+	author(
+        name : String
+    ): Author
+    
+}
+
+# This is the simple description of a humble person
+type Author {
+	#this is the name of the author.
+	name: String
+	books: [Book]
+}
+
+type Book {
+	name: String
+}

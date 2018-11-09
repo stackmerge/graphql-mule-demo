@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:core="http://www.mulesoft.org/schema/mule/core"
+	xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
+	xmlns:graphql="http://www.mulesoft.org/schema/mule/graphql" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd 
+	http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd 
+	http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+	http://www.mulesoft.org/schema/mule/graphql http://www.mulesoft.org/schema/mule/graphql/current/mule-graphql.xsd
+	http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd">
+
+	<http:listener-config name="api-httpListenerConfig">
+		<http:listener-connection host="0.0.0.0"
+			port="8083" protocol="HTTP">
+		</http:listener-connection>
+	</http:listener-config>
+
+	<graphql:config name="graphql-config" configName="mygraphql"
+		schemaLocation="schema/schema.graphqls" />
+
+	<flow name="console">
+		<http:listener config-ref="api-httpListenerConfig" path="/graphiql" />
+		<parse-template location="index.html" doc:name="Parse Template" />
+		<set-payload value="#[payload]" mimeType="text/html" />
+	</flow>
+
+	<flow name="graphql">
+		<http:listener config-ref="api-httpListenerConfig" path="/graphql" />
+
+		<graphql:router config-ref="graphql-config" payload="#[payload]" />
+	</flow>
+
+	<flow name="graphql:author">
+		<graphql:graphql-field-resolver
+			config-ref="graphql-config" fieldName="author" />
+
+		<scripting:execute engine="groovy">
+			<scripting:code>
+				payload = ['params' : attributes.getArguments(),
+				'fields' : attributes.getSelectionSet().get(),
+				'source' : 'person']
+			</scripting:code>
+		</scripting:execute>
+		<logger level="ERROR" message="Query params etc: #[payload]" />
+
+		<!-- Do query etc. if no field resolver needed it will just find it in 
+			the payload. obviously needs to match field names exactly etc. -->
+		<logger level="INFO" message="#[payload]" />
+		<set-payload
+			value="#[output application/java --- {'name' : 'ryan', 'anotherfield' :'a field that will not get returned'}]" />
+	</flow>
+
+	<flow name="graphql:books">
+		<graphql:graphql-field-resolver
+			config-ref="graphql-config" fieldName="books" />
+
+		<scripting:execute engine="groovy">
+			<scripting:code>
+				payload = attributes.getSource()
+			</scripting:code>
+		</scripting:execute>
+
+		<!-- Use these details to actually lookup books from a store, rest api 
+			or whatever. -->
+		<logger level="INFO" message="params etc: #[payload]" />
+
+		<set-payload
+			value="#[output application/java --- [{'name' :'Getting Started with Mule Cloud Connect'}]]" />
+	</flow>
+
+
+
+</mule>
