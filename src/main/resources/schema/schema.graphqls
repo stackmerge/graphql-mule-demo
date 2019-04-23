@@ -9,9 +9,9 @@ type Query{
     
 }
 
-# This is the simple description of a humble person
+# this is the simple description of a humble author.
 type Author {
-	#this is the name of the author.
+	# this is the name of the author.
 	name: String
 	books: [Book]
 }

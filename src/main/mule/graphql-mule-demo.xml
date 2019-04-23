@@ -39,7 +39,7 @@
 		<scripting:execute engine="groovy">
 			<scripting:code>
 				payload = ['params' : attributes.getArguments(),
-				'fields' : attributes.getSelectionSet().get(),
+				'fields' : attributes.getFields(),
 				'source' : 'person']
 			</scripting:code>
 		</scripting:execute>
