@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 
-<mule xmlns:core="http://www.mulesoft.org/schema/mule/core"
-	xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting"
+<mule xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:core="http://www.mulesoft.org/schema/mule/core" xmlns:scripting="http://www.mulesoft.org/schema/mule/scripting"
 	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core"
 	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation"
 	xmlns:graphql="http://www.mulesoft.org/schema/mule/graphql" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -9,7 +9,8 @@
 	http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd 
 	http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
 	http://www.mulesoft.org/schema/mule/graphql http://www.mulesoft.org/schema/mule/graphql/current/mule-graphql.xsd
-	http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd">
+	http://www.mulesoft.org/schema/mule/scripting http://www.mulesoft.org/schema/mule/scripting/current/mule-scripting.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd">
 
 	<http:listener-config name="api-httpListenerConfig">
 		<http:listener-connection host="0.0.0.0"
@@ -20,6 +21,10 @@
 	<graphql:config name="graphql-config" configName="mygraphql"
 		schemaLocation="schema/schema.graphqls" />
 
+	<http:request-config name="HTTP_Request_configuration"
+		doc:name="HTTP Request configuration" doc:id="f0816d26-df61-4bc0-beb2-28db339c6d23">
+		<http:request-connection host="localhost" port="8083" />
+	</http:request-config>
 	<flow name="console">
 		<http:listener config-ref="api-httpListenerConfig" path="/graphiql" />
 		<parse-template location="index.html" doc:name="Parse Template" />
@@ -36,40 +41,101 @@
 		<graphql:graphql-field-resolver
 			config-ref="graphql-config" fieldName="author" />
 
-		<scripting:execute engine="groovy">
+		<scripting:execute engine="groovy" doc:name="Store GQL data">
 			<scripting:code>
 				payload = ['params' : attributes.getArguments(),
-				'fields' : attributes.getFields(),
-				'source' : 'person']
+				'fields' : attributes.getFields()]
 			</scripting:code>
 		</scripting:execute>
-		<logger level="ERROR" message="Query params etc: #[payload]" />
 
 		<!-- Do query etc. if no field resolver needed it will just find it in 
 			the payload. obviously needs to match field names exactly etc. -->
-		<logger level="INFO" message="#[payload]" />
+		
+		<http:request method="GET" doc:name="GET /authors?name={name}" doc:id="2fc6fb92-3783-4873-b7e0-221d8f473899" config-ref="HTTP_Request_configuration" path="/authors">
+			<http:query-params ><![CDATA[#[output application/java
+---
+{
+	"name" : payload.params.name
+}]]]></http:query-params>
+		</http:request>
+		
 		<set-payload
-			value="#[output application/java --- {'name' : 'ryan', 'anotherfield' :'a field that will not get returned'}]" />
+			value="#[output application/java --- payload[0].author]" doc:name="Array to single Java Map"/>
 	</flow>
 
 	<flow name="graphql:books">
 		<graphql:graphql-field-resolver
 			config-ref="graphql-config" fieldName="books" />
-
-		<scripting:execute engine="groovy">
+			
+		<scripting:execute engine="groovy" doc:name="Store GQL data">
 			<scripting:code>
-				payload = attributes.getSource()
+				payload = ['params' : attributes.getArguments(),
+				'fields' : attributes.getFields(),
+				'source' : attributes.getSource()]
 			</scripting:code>
 		</scripting:execute>
-
-		<!-- Use these details to actually lookup books from a store, rest api 
-			or whatever. -->
-		<logger level="INFO" message="params etc: #[payload]" />
-
+		<http:request method="GET" doc:name="GET /authors/{id}/books" doc:id="4b2c8e37-470f-494a-932e-ec04843cb4f2" config-ref="HTTP_Request_configuration" path="/authors/{id}/books">
+			<http:uri-params ><![CDATA[#[output application/java
+---
+{
+	"id" : payload.source.id
+}]]]></http:uri-params>
+		</http:request>
+		
 		<set-payload
-			value="#[output application/java --- [{'name' :'Getting Started with Mule Cloud Connect'}]]" />
+			value="#[output application/java --- payload]" doc:name="To Java Map"/>
 	</flow>
-
+	
+	<flow name="authors-sapi">
+		<http:listener doc:name="/authors?name=*" config-ref="api-httpListenerConfig" path="/authors" />
+		<set-variable variableName="name" value="#[attributes.queryParams.name]" doc:name="name"/>
+		<ee:transform doc:name="Mock data from a DB" doc:id="b18abe83-89b1-48be-b86e-f5e88e17dc29" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+[
+	
+	author: {
+	name: 'ryan',
+	anotherfield: 'bla',
+	id: 1
+},
+	author: {
+	name: 'max',
+	anotherfield: 'bla2222',
+	id: 2
+}
+] filter $.author.name == vars.name]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		
+	</flow>
+	
+	<flow name="books-sapi">
+		<http:listener doc:name="/authors/id/books" config-ref="api-httpListenerConfig" path="/authors/{id}/books" />
+		<set-variable variableName="id" value="#[attributes.uriParams.id]" doc:name="id"/>
+		<ee:transform doc:name="Mock data from a DB" doc:id="eb872575-acb0-431d-85cd-c41c72e27743" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+[
+	
+	{
+	name: 'Getting Started with Mule Cloud Connect',
+	author: 1
+},
+	 {
+	name: 'The life and times of Max the Mule - Integrations greatest hunter',
+	author: 2
+}
+] filter $.author == (vars.id as Number)]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		
+	</flow>
+	
 
 
 </mule>
