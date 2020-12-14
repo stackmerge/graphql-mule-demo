@@ -14,7 +14,7 @@ http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/
 
 	<http:listener-config name="api-httpListenerConfig">
 		<http:listener-connection host="0.0.0.0"
-			port="8083" protocol="HTTP">
+			port="8081">
 		</http:listener-connection>
 	</http:listener-config>
 
@@ -23,7 +23,7 @@ http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/
 
 	<http:request-config name="HTTP_Request_configuration"
 		doc:name="HTTP Request configuration" doc:id="f0816d26-df61-4bc0-beb2-28db339c6d23">
-		<http:request-connection host="localhost" port="8083" />
+		<http:request-connection host="localhost" port="8081" />
 	</http:request-config>
 	<flow name="console">
 		<http:listener config-ref="api-httpListenerConfig" path="/graphiql" />
@@ -34,6 +34,7 @@ http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/
 	<flow name="graphql">
 		<http:listener config-ref="api-httpListenerConfig" path="/graphql" />
 
+		<logger level="INFO" doc:name="Logger" doc:id="44f74888-7161-446a-a679-5d4d7725fdd1" message="Inside Graphql"/>
 		<graphql:router config-ref="graphql-config" payload="#[payload]" />
 	</flow>
 
@@ -41,16 +42,17 @@ http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/
 		<graphql:graphql-field-resolver
 			config-ref="graphql-config" fieldName="author" />
 
-		<scripting:execute engine="groovy" doc:name="Store GQL data">
-			<scripting:code>
-				payload = ['params' : attributes.getArguments(),
-				'fields' : attributes.getFields()]
-			</scripting:code>
+		<logger level="INFO" doc:name="Logger" doc:id="04e6efe1-cc79-4154-91fc-630e98a87f8d" message="Inside Graphql:author"/>
+		<scripting:execute engine="Groovy" doc:name="Store GQL data">
+			<scripting:code><![CDATA[payload = ['params' : attributes.getArguments(),
+			'source' : 'person']
+			]]></scripting:code>
 		</scripting:execute>
 
 		<!-- Do query etc. if no field resolver needed it will just find it in 
 			the payload. obviously needs to match field names exactly etc. -->
 		
+		<logger level="INFO" doc:name="Logger" doc:id="56a9e3b5-32c8-4b06-b33e-5ea84cf99d9b" message="#[payload]"/>
 		<http:request method="GET" doc:name="GET /authors?name={name}" doc:id="2fc6fb92-3783-4873-b7e0-221d8f473899" config-ref="HTTP_Request_configuration" path="/authors">
 			<http:query-params ><![CDATA[#[output application/java
 ---
@@ -67,12 +69,12 @@ http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/
 		<graphql:graphql-field-resolver
 			config-ref="graphql-config" fieldName="books" />
 			
-		<scripting:execute engine="groovy" doc:name="Store GQL data">
-			<scripting:code>
+		<logger level="INFO" doc:name="Logger" doc:id="b423a104-413f-427c-a061-f53e77f6dc76" message="Inside Graphql:books"/>
+		<scripting:execute engine="Groovy" doc:name="Store GQL data">
+			<scripting:code><![CDATA[
 				payload = ['params' : attributes.getArguments(),
-				'fields' : attributes.getFields(),
 				'source' : attributes.getSource()]
-			</scripting:code>
+			]]></scripting:code>
 		</scripting:execute>
 		<http:request method="GET" doc:name="GET /authors/{id}/books" doc:id="4b2c8e37-470f-494a-932e-ec04843cb4f2" config-ref="HTTP_Request_configuration" path="/authors/{id}/books">
 			<http:uri-params ><![CDATA[#[output application/java
@@ -94,9 +96,7 @@ http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/
 				<ee:set-payload ><![CDATA[%dw 2.0
 output application/json
 ---
-[
-	
-	author: {
+[author: {
 	name: 'ryan',
 	anotherfield: 'bla',
 	id: 1
@@ -105,8 +105,7 @@ output application/json
 	name: 'max',
 	anotherfield: 'bla2222',
 	id: 2
-}
-] filter $.author.name == vars.name]]></ee:set-payload>
+}] filter $.author.name == vars.name]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
 		
@@ -120,17 +119,14 @@ output application/json
 				<ee:set-payload ><![CDATA[%dw 2.0
 output application/json
 ---
-[
-	
-	{
+[{
 	name: 'Getting Started with Mule Cloud Connect',
 	author: 1
 },
 	 {
 	name: 'The life and times of Max the Mule - Integrations greatest hunter',
 	author: 2
-}
-] filter $.author == (vars.id as Number)]]></ee:set-payload>
+}] filter $.author == (vars.id as Number)]]></ee:set-payload>
 			</ee:message>
 		</ee:transform>
 		
